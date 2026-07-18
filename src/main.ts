@@ -10,13 +10,13 @@ import { GESTURE, TIMING } from './constants';
 
 class Drawe {
   // Core components
-  private handTracker: HandTracker;
-  private gestureDetector: GestureDetector;
-  private drawingCanvas: DrawingCanvas;
-  private handVisualizer: HandVisualizer;
-  private scene3D: Scene3D;
-  private objectManager: ObjectManager;
-  private multiplayer: Multiplayer;
+  private handTracker!: HandTracker;
+  private gestureDetector!: GestureDetector;
+  private drawingCanvas!: DrawingCanvas;
+  private handVisualizer!: HandVisualizer;
+  private scene3D!: Scene3D;
+  private objectManager!: ObjectManager;
+  private multiplayer!: Multiplayer;
 
   // Preview components
   private previewVideo: HTMLVideoElement;
@@ -82,30 +82,36 @@ class Drawe {
     this.statusDot = document.getElementById('status-dot')!;
     this.statusText = document.getElementById('status-text')!;
 
-    // Initialize components
-    this.handTracker = new HandTracker(videoElement);
-    this.gestureDetector = new GestureDetector();
-    this.drawingCanvas = new DrawingCanvas(drawCanvas);
-    this.handVisualizer = new HandVisualizer(handCanvas);
-    this.scene3D = new Scene3D(sceneCanvas);
-    this.objectManager = new ObjectManager(
-      this.scene3D,
-      window.innerWidth,
-      window.innerHeight
-    );
-    this.multiplayer = new Multiplayer();
+    // Initialize components with error handling
+    try {
+      this.handTracker = new HandTracker(videoElement);
+      this.gestureDetector = new GestureDetector();
+      this.drawingCanvas = new DrawingCanvas(drawCanvas);
+      this.handVisualizer = new HandVisualizer(handCanvas);
+      this.scene3D = new Scene3D(sceneCanvas);
+      this.objectManager = new ObjectManager(
+        this.scene3D,
+        window.innerWidth,
+        window.innerHeight
+      );
+      this.multiplayer = new Multiplayer();
 
-    // Set initial size
-    this.resize();
+      // Set initial size
+      this.resize();
 
-    // Setup event listeners
-    this.setupEventListeners();
-    this.setupButtonListeners();
-    this.setupPreviewDrag();
-    this.setupMultiplayer();
+      // Setup event listeners
+      this.setupEventListeners();
+      this.setupButtonListeners();
+      this.setupPreviewDrag();
+      this.setupMultiplayer();
 
-    // Start the application
-    this.init();
+      // Start the application
+      this.init();
+    } catch (error) {
+      console.error('Failed to initialize application components:', error);
+      this.loadingOverlay.classList.add('hidden');
+      this.showStatus('Initialization failed: ' + (error instanceof Error ? error.message : String(error)));
+    }
   }
 
   private setupEventListeners(): void {
@@ -492,6 +498,7 @@ class Drawe {
       this.animate();
     } catch (error) {
       console.error('Failed to initialize:', error);
+      this.loadingOverlay.classList.add('hidden');
       this.showStatus('Camera access denied. Please allow camera access and refresh.');
     }
   }

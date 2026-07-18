@@ -1,4 +1,5 @@
-import { Hands, Results } from '@mediapipe/hands';
+import * as mpHands from '@mediapipe/hands';
+import type { Hands, Results } from '@mediapipe/hands';
 import { HandLandmarks, Point2D } from './types';
 
 export type HandResultsCallback = (landmarks: HandLandmarks | null) => void;
@@ -15,11 +16,25 @@ export class HandTracker {
   constructor(videoElement: HTMLVideoElement) {
     this.videoElement = videoElement;
 
-    this.hands = new Hands({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-      }
-    });
+    // Safely resolve constructor in both Vite local development and production/Vercel builds
+    const HandsConstructor = ((mpHands as any).Hands || (window as any).Hands || (globalThis as any).Hands) as typeof Hands;
+    
+    if (!HandsConstructor) {
+      const errorMsg = 'MediaPipe Hands constructor could not be resolved from imports or global scope.';
+      console.error(errorMsg);
+      throw new TypeError(errorMsg);
+    }
+
+    try {
+      this.hands = new HandsConstructor({
+        locateFile: (file) => {
+          return `/mediapipe/hands/${file}`;
+        }
+      });
+    } catch (error) {
+      console.error('Failed to construct MediaPipe Hands:', error);
+      throw error;
+    }
 
     this.hands.setOptions({
       maxNumHands: 1,
