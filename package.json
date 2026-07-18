@@ -1,0 +1,33 @@
+{
+  "name": "drawe",
+  "version": "1.0.0",
+  "description": "Gesture-based 3D balloon drawing canvas",
+  "type": "module",
+  "author": "Chaithanya Pedapudi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaith17/drawe.git"
+  },
+  "homepage": "https://github.com/chaith17/drawe#readme",
+  "bugs": {
+    "url": "https://github.com/chaith17/drawe/issues"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/drawing_utils": "^0.3.1675466124",
+    "@mediapipe/hands": "^0.4.1675469240",
+    "gsap": "^3.12.4",
+    "peerjs": "^1.5.5",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  }
+}

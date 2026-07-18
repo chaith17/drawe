@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gesture Palette</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <!-- Preload MediaPipe models for faster hand tracking initialization -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.binarypb" as="fetch" crossorigin>
+  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands_solution_packed_assets_loader.js" as="script" crossorigin>
+  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands_solution_simd_wasm_bin.js" as="script" crossorigin>
+  <style>
+    @import url('https://db.onlinewebfonts.com/c/00d715f4761b8ac0f7095decf1e95288?family=Nine+By+Five+NBP');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0d0d0d;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: radial-gradient(ellipse at 50% 50%, #1c1c1c 0%, #111111 60%, #080808 100%);
+    }
+
+    /* Content wrapper with max-width */
+    .content-wrapper {
+      max-width: 1980px;
+      width: 100%;
+      height: 100%;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* Video element for webcam - now visible in preview */
+    #webcam {
+      display: none;
+    }
+
+    /* Camera preview - draggable */
+    #camera-preview {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 320px;
+      height: 240px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(20px) saturate(120%);
+      -webkit-backdrop-filter: blur(20px) saturate(120%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 
+        inset 0 1px 1px rgba(255, 255, 255, 0.15),
+        0 12px 40px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+      cursor: grab;
+      user-select: none;
+    }
+
+    #camera-preview.dragging {
+      cursor: grabbing;
+      opacity: 0.9;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.7);
+      transition: none;
+    }
+
+    #camera-preview:not(.dragging) {
+      transition: box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+
+    #camera-preview.custom-position {
+      transform: none;
+    }
+
+    #camera-preview.expanded {
+      width: 640px;
+      height: 480px;
+    }
+
+    #camera-preview video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    #camera-preview canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .preview-expand-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      z-index: 11;
+    }
+
+    .preview-expand-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+
+    #camera-preview.expanded .preview-expand-btn {
+      transform: rotate(180deg);
+    }
+
+    /* 3D scene layer */
+    #scene-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Drawing canvas layer */
+    #draw-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Hand visualization layer */
+    #hand-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* UI overlay */
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    #ui-overlay > * {
+      pointer-events: auto;
+    }
+
+    /* Title section */
+    .title-section {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      z-index: 11;
+    }
+
+    .title-text {
+      color: #ffffff;
+      font-family: 'Nine By Five NBP', sans-serif;
+      font-size: 36px;
+      font-weight: bold;
+      font-style: normal;
+      letter-spacing: 0.05em;
+      margin-bottom: 0px;
+    }
+
+    /* Action buttons (top right) */
+    .action-buttons {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      display: flex;
+      gap: 12px;
+      z-index: 11;
+    }
+
+    .action-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 20px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px) saturate(120%);
+      -webkit-backdrop-filter: blur(20px) saturate(120%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      color: #ffffff;
+      font-family: 'Skia', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+        0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+        0 12px 40px 0 rgba(0, 0, 0, 0.4),
+        0 0 15px rgba(255, 255, 255, 0.1);
+    }
+
+    .action-btn:active {
+      transform: translateY(0) scale(0.96);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+        0 4px 15px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    .action-btn .icon {
+      font-size: 16px;
+    }
+
+    /* Color palette */
+    #color-palette {
+      position: absolute;
+      top: 50%;
+      right: 24px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 18px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px) saturate(120%);
+      -webkit-backdrop-filter: blur(20px) saturate(120%);
+      border-radius: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+        0 12px 40px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .color-swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .color-swatch:hover {
+      transform: scale(1.2);
+    }
+
+    .color-swatch.active {
+      border-color: #ffffff;
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+    }
+
+    /* Status message */
+    #status-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ffffff;
+      font-family: 'Bradley Hand', 'Bradley Hand ITC', cursive;
+      font-size: 32px;
+      font-weight: bold;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    }
+
+    #status-message.visible {
+      opacity: 1;
+    }
+
+    /* Bottom horizontal animated marquee container */
+    .bottom-marquee-container {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: auto;
+      max-width: 95vw;
+      overflow: visible;
+      z-index: 11;
+      pointer-events: none;
+    }
+
+    .marquee-content {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      white-space: nowrap;
+    }
+
+    .marquee-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: rgba(255, 255, 255, 0.9);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+    }
+
+    .marquee-separator {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 14px;
+      margin: 0 5px;
+      user-select: none;
+    }
+
+    .gesture-glass-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 
+        inset 0 1px 1px rgba(255, 255, 255, 0.25),
+        0 4px 10px rgba(0, 0, 0, 0.3);
+      font-size: 13px;
+    }
+
+    /* Invite Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .modal-overlay.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: linear-gradient(145deg, #1c1c1c 0%, #111111 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+        0 20px 60px rgba(0, 0, 0, 0.7);
+      transform: scale(0.9);
+      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .modal-overlay.visible .modal {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      color: #ffffff;
+      font-family: 'Nine By Five NBP', sans-serif;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 50%;
+      color: #ffffff;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .modal-body {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .room-code-section {
+      margin: 20px 0;
+    }
+
+    .room-code-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.55);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .room-code-display {
+      display: flex;
+      gap: 10px;
+    }
+
+    .room-code {
+      flex: 1;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #ffffff;
+      font-family: 'Inter', monospace;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-align: center;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .copy-btn {
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 24px 0;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .divider span {
+      padding: 0 16px;
+    }
+
+    .join-section input {
+      width: 100%;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      text-align: center;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .join-section input::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .join-section input:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    }
+
+    .join-btn {
+      width: 100%;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .join-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .connection-status {
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #666;
+    }
+
+    .status-dot.connected {
+      background: #4ade80;
+      box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+    }
+
+    .status-dot.connecting {
+      background: #fbbf24;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at 50% 50%, #1c1c1c 0%, #111111 60%, #080808 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: #ffffff;
+      margin-top: 24px;
+      font-family: 'Nine By Five NBP', sans-serif;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+    }
+
+    /* Decorative elements */
+    .decorative-text {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Futura', -apple-system, sans-serif;
+      font-size: 72px;
+      font-weight: bold;
+      color: rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* ==================== RESPONSIVE STYLES ==================== */
+
+    /* Tablet */
+    @media (max-width: 1024px) {
+      .decorative-text {
+        font-size: 48px;
+        bottom: 60px;
+      }
+
+      #camera-preview {
+        width: 240px;
+        height: 180px;
+      }
+
+      #camera-preview.expanded {
+        width: 480px;
+        height: 360px;
+      }
+
+      .title-text {
+        font-size: 28px;
+      }
+    }
+
+    /* Mobile landscape and small tablets */
+    @media (max-width: 768px) {
+      .title-section {
+        top: 16px;
+        left: 16px;
+      }
+
+      .title-text {
+        font-size: 24px;
+      }
+
+      #camera-preview {
+        width: 160px;
+        height: 120px;
+      }
+
+      #camera-preview:not(.custom-position) {
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      #camera-preview.expanded {
+        width: 320px;
+        height: 240px;
+      }
+
+      .action-buttons {
+        top: 16px;
+        right: 16px;
+        gap: 8px;
+      }
+
+      .action-btn {
+        height: 36px;
+        padding: 0 12px;
+        font-size: 12px;
+        border-radius: 18px;
+      }
+
+      .action-btn .btn-text {
+        display: none;
+      }
+
+      .action-btn .icon {
+        font-size: 18px;
+      }
+
+      #color-palette {
+        right: 16px;
+        padding: 10px 8px;
+        gap: 8px;
+      }
+
+      .color-swatch {
+        width: 28px;
+        height: 28px;
+      }
+
+      .bottom-marquee-container {
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: 98vw;
+      }
+
+      .marquee-content {
+        gap: 8px;
+      }
+
+      .marquee-item {
+        font-size: 10px;
+        gap: 6px;
+      }
+
+      .gesture-glass-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+      }
+
+      .decorative-text {
+        display: none;
+      }
+
+      #status-message {
+        font-size: 22px;
+        padding: 0 20px;
+      }
+
+      .modal {
+        padding: 24px;
+        margin: 16px;
+      }
+
+      .modal-title {
+        font-size: 24px;
+      }
+
+      .room-code {
+        font-size: 18px;
+        padding: 12px 14px;
+      }
+    }
+
+    /* Mobile portrait */
+    @media (max-width: 480px) {
+      .title-section {
+        top: 12px;
+        left: 12px;
+      }
+
+      .title-text {
+        font-size: 18px;
+      }
+
+      #camera-preview {
+        width: 120px;
+        height: 90px;
+        border-radius: 12px;
+      }
+
+      #camera-preview:not(.custom-position) {
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .action-buttons {
+        top: 12px;
+        right: 12px;
+        gap: 6px;
+      }
+
+      .action-btn {
+        height: 32px;
+        padding: 0 10px;
+        border-radius: 16px;
+      }
+
+      #color-palette {
+        right: 12px;
+        padding: 8px 6px;
+        gap: 6px;
+        border-radius: 24px;
+      }
+
+      .color-swatch {
+        width: 24px;
+        height: 24px;
+      }
+
+      .bottom-marquee-container {
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: 100vw;
+      }
+
+      .marquee-content {
+        gap: 5px;
+      }
+
+      .marquee-item {
+        font-size: 8.5px;
+        gap: 4px;
+        letter-spacing: 0.01em;
+      }
+
+      .gesture-glass-btn {
+        width: 22px;
+        height: 22px;
+        font-size: 9px;
+      }
+
+      .marquee-separator {
+        font-size: 9px;
+        margin: 0 2px;
+      }
+
+      #status-message {
+        font-size: 18px;
+      }
+
+      .modal {
+        padding: 20px;
+        border-radius: 16px;
+      }
+
+      .modal-title {
+        font-size: 22px;
+      }
+
+      .room-code {
+        font-size: 16px;
+        padding: 10px 12px;
+      }
+    }
+
+    /* Very small screens */
+    @media (max-width: 360px) {
+      #camera-preview {
+        width: 100px;
+        height: 75px;
+      }
+
+      .color-swatch {
+        width: 22px;
+        height: 22px;
+      }
+
+      #color-palette {
+        gap: 5px;
+        padding: 6px 5px;
+      }
+    }
+
+    /* Landscape mobile */
+    @media (max-height: 500px) and (orientation: landscape) {
+      #camera-preview {
+        width: 140px;
+        height: 105px;
+      }
+
+      #camera-preview:not(.custom-position) {
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .title-section {
+        top: 12px;
+      }
+
+      .title-text {
+        font-size: 22px;
+      }
+
+      #color-palette {
+        flex-direction: row;
+        top: auto;
+        bottom: 16px;
+        right: 50%;
+        transform: translateX(50%);
+        padding: 8px 12px;
+        border-radius: 20px;
+      }
+
+      .bottom-marquee-container {
+        bottom: 68px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: 95vw;
+      }
+
+      .marquee-content {
+        gap: 8px;
+      }
+
+      .marquee-item {
+        font-size: 10px;
+        gap: 6px;
+      }
+
+      .gesture-glass-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="content-wrapper">
+      <video id="webcam" playsinline></video>
+      <canvas id="scene-canvas"></canvas>
+      <canvas id="draw-canvas"></canvas>
+      <canvas id="hand-canvas"></canvas>
+
+      <!-- Camera preview with hand tracking overlay -->
+      <div id="camera-preview">
+        <video id="preview-video" playsinline muted></video>
+        <canvas id="preview-canvas"></canvas>
+        <button class="preview-expand-btn" id="preview-expand-btn" title="Expand preview">⤢</button>
+      </div>
+
+      <div id="ui-overlay">
+      <div class="title-section">
+        <div class="title-text">drawe!</div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="action-buttons">
+        <button class="action-btn" id="clear-all-btn">
+          <span class="icon">🗑️</span>
+          <span class="btn-text">clean</span>
+        </button>
+        <button class="action-btn" id="invite-btn">
+          <span class="icon">👥</span>
+          <span class="btn-text">summon</span>
+        </button>
+      </div>
+
+      <!-- Color palette -->
+      <div id="color-palette">
+        <div class="color-swatch active" data-color="#F24E1E" style="background: #F24E1E;"></div>
+        <div class="color-swatch" data-color="#FF7262" style="background: #FF7262;"></div>
+        <div class="color-swatch" data-color="#A259FF" style="background: #A259FF;"></div>
+        <div class="color-swatch" data-color="#1ABCFE" style="background: #1ABCFE;"></div>
+        <div class="color-swatch" data-color="#0ACF83" style="background: #0ACF83;"></div>
+      </div>
+
+      <!-- Bottom horizontal instruction toolbar -->
+      <div class="bottom-marquee-container">
+        <div class="marquee-content">
+          <div class="marquee-item"><span class="gesture-glass-btn">👆🏻</span>Point to DRAW</div>
+          <div class="marquee-separator">|</div>
+          <div class="marquee-item"><span class="gesture-glass-btn">🤏🏻</span>Pinch to GRAB</div>
+          <div class="marquee-separator">|</div>
+          <div class="marquee-item"><span class="gesture-glass-btn">✋🏻</span>Palm to BLOW</div>
+          <div class="marquee-separator">|</div>
+          <div class="marquee-item"><span class="gesture-glass-btn">🖱️</span>SCROLL to zoom</div>
+          <div class="marquee-separator">|</div>
+          <div class="marquee-item"><span class="gesture-glass-btn">⠿</span>DRAG to orbit</div>
+          <div class="marquee-separator">|</div>
+          <div class="marquee-item"><span class="gesture-glass-btn">➤</span>CLICK to select</div>
+        </div>
+      </div>
+
+      <div id="status-message"></div>
+
+      <div class="decorative-text">spawn using wrist</div>
+    </div>
+    </div>
+
+    <!-- Invite Modal -->
+    <div class="modal-overlay" id="invite-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">invite a pal</h2>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Share this room code with a friend to draw together in real-time!</p>
+
+          <div class="room-code-section">
+            <div class="room-code-label">LOBBY CODE</div>
+            <div class="room-code-display">
+              <div class="room-code" id="room-code">------</div>
+            </div>
+          </div>
+
+          <div class="divider"><span>or join a pal</span></div>
+
+          <div class="join-section">
+            <input type="text" id="join-code-input" placeholder="lobby code" maxlength="6">
+            <button class="join-btn" id="join-room-btn">JOIN</button>
+          </div>
+
+          <div class="connection-status" id="connection-status">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-text">Not connected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Initializing hand tracking...</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
